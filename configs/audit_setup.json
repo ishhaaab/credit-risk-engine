@@ -1,0 +1,12 @@
+{
+  "stage": 1,
+  "scope": "Audit tooling setup only. Stage 1 loan processing has not been run.",
+  "random_seeds": {},
+  "datasets": [],
+  "commands": [],
+  "important_diff_files": [
+    "scripts/make_audit_packet.py",
+    "tests/test_audit_packet.py",
+    "configs/audit_setup.json"
+  ]
+}

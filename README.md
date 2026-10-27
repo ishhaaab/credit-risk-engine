@@ -6,7 +6,7 @@ The project will estimate the probability of default, loss given default, and ex
 
 ## Current status
 
-Repository setup only. Source data covering 2004 to 2012 is being downloaded by the project owner. File contents, origination coverage, and the end of the payment histories have not yet been checked. No loan data has been processed and no modelling results are available.
+Repository and audit-tooling setup. The selected Freddie Mac archive years are 2005 to 2011; 2004 and 2012 are excluded at the owner's request. File contents, origination coverage, and the end of the payment histories have not yet been checked. No loan data has been processed and no modelling results are available.
 
 ## Stages
 
@@ -45,3 +45,20 @@ Stage-specific commands and dependency versions will be added as the stages are 
 There are no results yet. The requested loan years include the financial crisis, but the available follow-up and loss fields still need inspection. The work is an educational modelling project; its IFRS 9 and Basel choices will need explicit assumptions and should not be presented as an approved bank model.
 
 `README.md` is tracked. Stage explanations, the model development document, and interview preparation stay in the ignored `docs/` directory.
+
+## Commit audit packets
+
+Install the pinned audit dependencies with `python -m pip install -r requirements.txt`.
+Run the checks with `python -m pytest -vv -ra --color=no`.
+
+After each commit, generate mechanical evidence with:
+
+```powershell
+python scripts/make_audit_packet.py --manifest configs/audit_setup.json
+```
+
+Without `--narrative`, this creates a draft and exits with code 1. Write sections C and D in a local file under `docs/audit/`, then pass its path with `--narrative` to generate the combined packet. Packets and their JSON evidence sidecars stay in the ignored `docs/audit/` directory. Existing packets are not overwritten.
+
+Use a stage-specific manifest to name every input and output dataset, random seed, and stage command. The generator inspects only declared datasets. It measures Parquet files or delimited files, including explicitly named nested ZIP members, without extracting archives. Declare `date_columns` and, for text dates, the `date_format`; headerless text also needs `columns` and `header: false`. Dataset roles are `input`, `output`, or `inout`.
+
+The generator records the Git state, changes, environment, configuration contents, verbose pytest output, command durations, and declared dataset fingerprints. Pass `--include-run` for previously captured command records, `--red-flag` for an analyst's concern, and `--findings-response` for a response to an auditor. Exit code 1 means review the packet's red flags; exit code 2 means packet generation failed. Imported logs are explicitly labelled as historical evidence, not a fresh test run.
