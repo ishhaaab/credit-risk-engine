@@ -1,0 +1,42 @@
+# Personal explanations, project notes, and interview preparation.
+/docs/
+
+# Local source data, databases, and generated model outputs.
+/data/
+/artifacts/
+/outputs/
+*.parquet
+*.duckdb
+*.duckdb.wal
+*.zip
+*.7z
+*.gz
+*.tar
+*.part
+*.crdownload
+
+# Python environments and caches.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Notebook checkpoints and local credentials.
+.ipynb_checkpoints/
+.env
+.env.*
+!.env.example
+
+# Editor and operating-system files.
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
