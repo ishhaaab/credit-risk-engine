@@ -127,6 +127,68 @@ def test_nested_zip_fingerprint_counts_declared_text_member_without_extraction(t
     assert sorted(path.name for path in tmp_path.iterdir()) == ["outer.zip"]
 
 
+def test_recorded_archive_counts_require_unchanged_container_and_complete_inventory(tmp_path):
+    auditor = load_auditor()
+    inner = io.BytesIO()
+    with ZipFile(inner, "w") as quarter:
+        quarter.writestr("loans.txt", "A|200601\nB|200602\n")
+    archive = tmp_path / "annual.zip"
+    with ZipFile(archive, "w") as annual:
+        annual.writestr("quarter.zip", inner.getvalue())
+    member = {"quarter_archive": "quarter.zip", "member": "loans.txt", "bytes": 18,
+              "row_count": 2, "columns": ["loan", "month"],
+              "dates": {"month": {"min": "2006-01-01", "max": "2006-02-01"}},
+              "sha256": hashlib.sha256(b"A|200601\nB|200602\n").hexdigest()}
+    member["bytes"] = len(b"A|200601\nB|200602\n")
+    source = {"path": "annual.zip", "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+              "bytes": archive.stat().st_size, "members": [member]}
+    manifest = tmp_path / "scan.json"
+    manifest.write_text(json.dumps({"sources": [source], "measured_at": "fixture"}))
+    spec = {"path": "annual.zip", "format": "recorded_zip", "record_path": "scan.json", "date_columns": []}
+    result = auditor.fingerprint_dataset(tmp_path, spec)
+    assert result["member_fingerprints"][0]["row_count"] == 2
+    assert result["member_fingerprints"][0]["dates"]["month"]["min"] == "2006-01-01"
+    assert result["measurement_basis"] == "recorded full scan; current container hash and inventory verified"
+    source["members"] = []
+    manifest.write_text(json.dumps({"sources": [source]}))
+    with pytest.raises(ValueError, match="inventory"):
+        auditor.fingerprint_dataset(tmp_path, spec)
+    source["members"] = [member]
+    manifest.write_text(json.dumps({"sources": [source]}))
+    with ZipFile(archive, "a") as annual:
+        annual.writestr("extra.txt", "changed")
+    with pytest.raises(ValueError, match="changed"):
+        auditor.fingerprint_dataset(tmp_path, spec)
+
+
+def test_recorded_scan_changes_are_flagged_even_when_the_archive_is_unchanged(audit_repo):
+    inner = io.BytesIO()
+    payload = b"A|200601\n"
+    with ZipFile(inner, "w") as quarter:
+        quarter.writestr("loans.txt", payload)
+    archive = audit_repo / "annual.zip"
+    with ZipFile(archive, "w") as annual:
+        annual.writestr("quarter.zip", inner.getvalue())
+    record = {"sources": [{"path": "annual.zip", "bytes": archive.stat().st_size,
+        "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(), "members": [{
+            "quarter_archive": "quarter.zip", "member": "loans.txt", "bytes": len(payload),
+            "row_count": 1, "columns": ["loan", "month"], "dates": {},
+            "sha256": hashlib.sha256(payload).hexdigest()}]}]}
+    (audit_repo / "docs/scan.json").write_text(json.dumps(record))
+    configure(audit_repo, datasets=[{"path": "annual.zip", "format": "recorded_zip",
+        "record_path": "docs/scan.json", "date_columns": [], "role": "input"}], commands=[{
+        "name": "Modify ignored recorded counts without modifying source archive", "argv": ["{python}", "-c",
+        "import json;from pathlib import Path;p=Path('docs/scan.json');d=json.loads(p.read_text());d['sources'][0]['members'][0]['row_count']=200;p.write_text(json.dumps(d))"]}])
+    process, packet, text = run_packet(audit_repo)
+    assert process.returncode == 1
+    assert "Input content changed" in text
+    evidence = json.loads(packet.with_suffix(".json").read_text())
+    assert evidence["metadata"]["working_tree_clean_at_end"]
+    before, after = evidence["fingerprints"]
+    assert before["sha256"] == after["sha256"]
+    assert before["record_sha256"] != after["record_sha256"]
+
+
 def test_bad_columns_and_dates_cannot_get_successful_fingerprints(tmp_path):
     auditor = load_auditor()
     (tmp_path / "fixture.csv").write_text("loan,month\nA,not-a-date\n")

@@ -1,0 +1,31 @@
+{
+  "stage": 1,
+  "scope": "Stage 1 loan ingestion, event definitions and time-split panel. The archive full scans and panel run are imported timed evidence. This invocation verifies saved output hashes, rechecks archive containers, fingerprints Parquet and runs pytest. No model or macro join is run.",
+  "random_seeds": {"loan_hash_sample": 1729, "PYTHONHASHSEED": 0},
+  "datasets": [
+    {"path": "data/raw/historical_data_2005.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/raw/historical_data_2006.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/raw/historical_data_2007.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/raw/historical_data_2008.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/raw/historical_data_2009.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/raw/historical_data_2010.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/raw/historical_data_2011.zip", "format": "recorded_zip", "record_path": "outputs/stage1/source_fingerprints.json", "date_columns": [], "role": "input"},
+    {"path": "data/processed/stage1/raw_origination.parquet", "format": "parquet", "date_columns": ["first_payment_date", "maturity_date"], "date_format": "%Y%m", "role": "input"},
+    {"path": "data/processed/stage1/raw_performance.parquet", "format": "parquet", "date_columns": ["period"], "date_format": "%Y%m", "role": "input"},
+    {"path": "data/processed/stage1/loans.parquet", "format": "parquet", "date_columns": ["first_payment_date", "maturity_date"], "role": "input"},
+    {"path": "data/processed/stage1/loan_events.parquet", "format": "parquet", "date_columns": ["first_observed_month", "last_observed_month", "first_default_month"], "role": "input"},
+    {"path": "data/processed/stage1/loan_month_panel.parquet", "format": "parquet", "date_columns": ["reporting_month"], "role": "input"},
+    {"path": "data/processed/stage1/pd_features.parquet", "format": "parquet", "date_columns": ["reporting_month", "feature_asof_month"], "role": "input"},
+    {"path": "data/processed/stage1/pd_targets.parquet", "format": "parquet", "date_columns": ["reporting_month"], "role": "input"},
+    {"path": "data/external/alfred/UNRATE_2005-12-31.csv", "format": "delimited", "date_columns": ["observation_date"], "role": "input"},
+    {"path": "data/external/alfred/UNRATE_2011-12-31.csv", "format": "delimited", "date_columns": ["observation_date"], "role": "input"},
+    {"path": "data/external/alfred/USSTHPI_2011-12-31.csv", "format": "delimited", "date_columns": ["observation_date"], "role": "input"}
+  ],
+  "commands": [
+    {
+      "name": "Verify saved Stage 1 outputs and reproduce measured summaries",
+      "argv": ["{python}", "-c", "import hashlib,json\nfrom pathlib import Path\nroot=Path('.')\nreport=root/'outputs/stage1'\ndef digest(path):\n    with path.open('rb') as stream:\n        return hashlib.file_digest(stream,'sha256').hexdigest()\nsuccess=json.loads((report/'panel_success.json').read_text())\nassert digest(report/'panel_summary.json')==success['summary_sha256'], 'panel summary changed'\nfor filename in ['ingestion_summary.json','panel_summary.json']:\n    summary=json.loads((report/filename).read_text())\n    for name,expected in summary['parquet_sha256'].items():\n        assert digest(root/'data/processed/stage1'/name)==expected, 'Changed output: '+name\n        print(json.dumps({'verified_file':name,'sha256':expected}))\n    print(json.dumps(summary,default=str))"]
+    }
+  ],
+  "important_diff_files": ["src/credit_risk/panel.py", "src/credit_risk/ingest.py", "tests/test_stage1.py"]
+}

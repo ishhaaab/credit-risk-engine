@@ -1,0 +1,24 @@
+{
+  "schema_version": "freddie-standard-release47-july2026",
+  "raw_dir": "data/raw",
+  "output_dir": "data/processed/stage1",
+  "report_dir": "outputs/stage1",
+  "years": [2005, 2006, 2007, 2008, 2009, 2010, 2011],
+  "sample": {"seed": 1729, "numerator": 2, "denominator": 100},
+  "csv_block_bytes": 8388608,
+  "duckdb": {"memory_limit": "2GB", "threads": 2},
+  "default": {"minimum_delinquency_months": 3, "reo_status": "RA", "credit_exit_codes": ["02", "03", "09"]},
+  "payoff_code": "01",
+  "transfer_codes": ["15", "16", "96"],
+  "splits": {
+    "train": {"vintages": [2005, 2006, 2007], "start": "2005-01-01", "end": "2011-12-01"},
+    "validation": {"vintages": [2008, 2009], "start": "2012-01-01", "end": "2013-12-01"},
+    "out_of_time": {"vintages": [2010, 2011], "start": "2014-01-01", "end": "2016-12-01"}
+  },
+  "sources": {
+    "guide": "https://www.freddiemac.com/fmac-resources/research/pdf/general_user_guide_july_2026.pdf",
+    "guide_sha256": "4693ae754109c213feb84e97702fa675ed3926c2a5f4b6f7ba3c347db2aaf03e",
+    "layout": "https://www.freddiemac.com/fmac-resources/research/pdf/file_layout_july_2026.xlsx",
+    "layout_sha256": "ce054271c42b7ad5f173a045c73368d997a2ac99253dcb312a45ccef43a4b13e"
+  }
+}

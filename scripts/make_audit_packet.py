@@ -73,7 +73,43 @@ def fingerprint_dataset(repo, spec):
             current["min"] = value if current["min"] is None else min(current["min"], value)
             current["max"] = value if current["max"] is None else max(current["max"], value)
 
-        if spec["format"] == "parquet":
+        if spec["format"] == "recorded_zip":
+            # The ingestion pass already counted and hashed every uncompressed
+            # member. Verify its container now, without parsing 700M rows twice.
+            record_path = repo / spec["record_path"]
+            recorded = json.loads(record_path.read_text(encoding="utf-8"))
+            matches = [item for item in recorded["sources"] if item["path"] == spec["path"]]
+            if len(matches) != 1:
+                raise ValueError("Recorded archive must appear exactly once")
+            source = matches[0]
+            if source["sha256"] != result["sha256"] or source["bytes"] != before.st_size:
+                raise ValueError("Archive changed since its recorded full scan")
+            members = source["members"]
+            expected = {(item["quarter_archive"], item["member"]): item["bytes"] for item in members}
+            actual = {}
+            with ZipFile(stream) as annual:
+                if len(annual.namelist()) != len(set(annual.namelist())):
+                    raise ValueError("Duplicate archive inventory entries")
+                for quarter_name in annual.namelist():
+                    with annual.open(quarter_name) as nested, ZipFile(nested) as quarter:
+                        for item in quarter.infolist():
+                            key = (quarter_name, item.filename)
+                            if key in actual:
+                                raise ValueError("Duplicate member inventory entries")
+                            actual[key] = item.file_size
+            if actual != expected or len(expected) != len(members):
+                raise ValueError("Recorded inventory does not match the archive")
+            for item in members:
+                if not isinstance(item["row_count"], int) or item["row_count"] < 0 or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"]):
+                    raise ValueError("Invalid recorded member measurement")
+                if not item["columns"] or set(item["dates"]) - set(item["columns"]):
+                    raise ValueError("Invalid recorded columns or dates")
+            result.update(member_fingerprints=members,
+                          measurement_basis="recorded full scan; current container hash and inventory verified",
+                          record_path=str(record_path), record_sha256=sha256_file(record_path),
+                          recorded_at=recorded.get("measured_at"),
+                          recorded_ingest_code_sha256=recorded.get("ingest_code_sha256"))
+        elif spec["format"] == "parquet":
             import pyarrow.parquet as pq
 
             parquet = pq.ParquetFile(stream)
@@ -101,8 +137,9 @@ def fingerprint_dataset(repo, spec):
                     update(column, row[position])
         else:
             raise ValueError(f"Unsupported dataset format: {spec['format']}")
-        result.update(row_count=rows, columns=columns, dates=bounds,
-                      date_columns_declared=dates, container_bytes=before.st_size)
+        if spec["format"] != "recorded_zip":
+            result.update(row_count=rows, columns=columns, dates=bounds)
+        result.update(date_columns_declared=dates, container_bytes=before.st_size)
     after = path.stat()
     if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
         raise ValueError("Dataset changed while its fingerprint was being measured")
@@ -232,7 +269,9 @@ def build_packet(args):
     for index, spec in enumerate(manifest["datasets"]):
         after = measure(spec, "after commands")
         before = inputs.get(index, {})
-        if spec.get("role", "input") == "input" and before.get("sha256") != after.get("sha256"):
+        if spec.get("role", "input") == "input" and any(
+            before.get(key) != after.get(key) for key in ("sha256", "record_sha256")
+        ):
             recorder.flags.append(f"Input content changed during the run: {spec['path']}")
     previous = []
     for name in args.include_run:
